@@ -1,28 +1,138 @@
-import { sha256 } from "js-sha256";
-import { serialize, deserialize } from "serializer.ts/Serializer";
-import BigNumber from "bignumber.js";
+import { Address } from './08_storage';
+import { Blockchain } from './13_consensus';
+import { Address } from './12_discovery';
+import { Address } from './03_transactions';
+import { QuestionContent, Inquiry } from './final';
+import { Address } from './10_initial_web_api';
+import { sha256 } from 'js-sha256';
+import { serialize, deserialize } from 'serializer.ts/Serializer';
+import BigNumber from 'bignumber.js';
 
-import * as fs from "fs";
-import * as path from "path";
-import deepEqual = require("deep-equal");
+import * as fs from 'fs';
+import * as path from 'path';
+import deepEqual = require('deep-equal');
 
-import * as uuidv4 from "uuid/v4";
-import * as express from "express";
-import * as bodyParser from "body-parser";
-import { URL } from "url";
-import axios from "axios";
+import * as uuidv4 from 'uuid/v4';
+import * as express from 'express';
+import * as bodyParser from 'body-parser';
+import { URL } from 'url';
+import axios from 'axios';
 
-import { Set } from "typescript-collections";
-import * as parseArgs from "minimist";
+import { Set } from 'typescript-collections';
+import * as parseArgs from 'minimist';
 
 export type Address = string;
+
+export class PublicClaim {
+  public claimContent: string;
+  public subject: Address;
+  public claimer: Address;
+  public hash: number;
+
+  constructor(
+    claimContent: string,
+    subject: Address,
+    claimer: Address,
+    hash: number
+  ) {
+    this.claimContent = claimContent;
+    this.subject = subject;
+    this.claimer = claimer;
+    this.hash = hash;
+  }
+}
+
+export class QuestionContent {
+  public question: string;
+
+  constructor(content: string, subject: Address, isEncrypted: boolean) {}
+
+  getSignature(privateKey: string) {}
+}
+
+export class Claim {
+
+}
+
+//todo
+export class Node {
+  constructor(seed: string, chain: Blockchain) {
+    const PGP = genPGP(seed);
+    this.address = PGP.publicKey;
+    this.privateKey = PGP.privateKey;
+  }
+
+  public address: Address;
+  public submitInquiry(content, subject, claimer) {
+    const inquiry = encryptWithPGP(`___content___: ${content}, ___subject___: ${subject}`, claimer)
+    chain.submit({claimer, inquiry});
+  }
+
+  public submitClaim(content, subject, uri: string?) {
+    let actualContent = content;
+    if (uri)
+      actualContent = uri + '?hash=' + sha256(content)
+    else 
+      actualContent = content;
+
+    chain.submit({claimer: this.address, claim: actualContent })
+
+  }
+
+  public respondToInquiry(){
+    //todo
+  }
+
+  /**
+   * todo: 
+   * 1. fill Node psuedo code and remove unused funcs
+   * 2. respondToInquiry
+   * 3. locate claimes about a node
+   * 4. make a usefull looking example 
+   */
+  private privateKey: string;
+}
+
+export class Inquiry {
+  // question is a hash of the questionContent, and the question's subject optionally encrypted with the
+  // claimer's public key (address)
+  public question: string;
+  public claimer: Address;
+  public signature: number;
+  //todo?
+  public isEncrypted: boolean;
+
+  constructor(
+    questionContent: string,
+    claimer: Address,
+    // isEncrypted: boolean,
+    signature: number,
+    content: string,
+    subject: string
+  ) {
+    this.question = this.bundleQuestionContent(content, subject, claimer);
+    this.signature = signature;
+    this.claimer = claimer;
+  }
+  public bundleQuestionContent(
+    content: string,
+    subject: Address,
+    claimer: Address
+  ): string {
+    NodeRSA({});
+  }
+}
 
 export class Transaction {
   public senderAddress: Address;
   public recipientAddress: Address;
   public value: number;
 
-  constructor(senderAddress: Address, recipientAddress: Address, value: number) {
+  constructor(
+    senderAddress: Address,
+    recipientAddress: Address,
+    value: number
+  ) {
     this.senderAddress = senderAddress;
     this.recipientAddress = recipientAddress;
     this.value = value;
@@ -36,8 +146,13 @@ export class Block {
   public nonce: number;
   public prevBlock: string;
 
-  constructor(blockNumber: number, transactions: Array<Transaction>, timestamp: number, nonce: number,
-    prevBlock: string) {
+  constructor(
+    blockNumber: number,
+    transactions: Array<Transaction>,
+    timestamp: number,
+    nonce: number,
+    prevBlock: string
+  ) {
     this.blockNumber = blockNumber;
     this.transactions = transactions;
     this.timestamp = timestamp;
@@ -61,18 +176,18 @@ export class Node {
   }
 
   public toString(): string {
-      return `${this.id}:${this.url}`;
+    return `${this.id}:${this.url}`;
   }
 }
 
 export class Blockchain {
   // Let's define that our "genesis" block as an empty block, starting from the January 1, 1970 (midnight "UTC").
-  public static readonly GENESIS_BLOCK = new Block(0, [], 0, 0, "fiat lux");
+  public static readonly GENESIS_BLOCK = new Block(0, [], 0, 0, 'fiat lux');
 
   public static readonly DIFFICULTY = 4;
   public static readonly TARGET = 2 ** (256 - Blockchain.DIFFICULTY);
 
-  public static readonly MINING_SENDER = "<COINBASE>";
+  public static readonly MINING_SENDER = '<COINBASE>';
   public static readonly MINING_REWARD = 50;
 
   public nodeId: string;
@@ -86,7 +201,11 @@ export class Blockchain {
     this.nodes = new Set<Node>();
     this.transactionPool = [];
 
-    this.storagePath = path.resolve(__dirname, "../", `${this.nodeId}.blockchain`);
+    this.storagePath = path.resolve(
+      __dirname,
+      '../',
+      `${this.nodeId}.blockchain`
+    );
 
     // Load the blockchain from the storage.
     this.load();
@@ -99,15 +218,22 @@ export class Blockchain {
 
   // Saves the blockchain to the disk.
   private save() {
-    fs.writeFileSync(this.storagePath, JSON.stringify(serialize(this.blocks), undefined, 2), "utf8");
+    fs.writeFileSync(
+      this.storagePath,
+      JSON.stringify(serialize(this.blocks), undefined, 2),
+      'utf8'
+    );
   }
 
   // Loads the blockchain from the disk.
   private load() {
     try {
-      this.blocks = deserialize<Block[]>(Block, JSON.parse(fs.readFileSync(this.storagePath, "utf8")));
+      this.blocks = deserialize<Block[]>(
+        Block,
+        JSON.parse(fs.readFileSync(this.storagePath, 'utf8'))
+      );
     } catch (err) {
-      if (err.code !== "ENOENT") {
+      if (err.code !== 'ENOENT') {
         throw err;
       }
 
@@ -127,7 +253,7 @@ export class Blockchain {
 
       // The first block has to be the genesis block.
       if (!deepEqual(blocks[0], Blockchain.GENESIS_BLOCK)) {
-        throw new Error("Invalid first block!");
+        throw new Error('Invalid first block!');
       }
 
       // Verify the chain itself.
@@ -136,7 +262,9 @@ export class Blockchain {
 
         // Verify block number.
         if (current.blockNumber !== i) {
-          throw new Error(`Invalid block number ${current.blockNumber} for block #${i}!`);
+          throw new Error(
+            `Invalid block number ${current.blockNumber} for block #${i}!`
+          );
         }
 
         // Verify that the current blocks properly points to the previous block.
@@ -149,7 +277,9 @@ export class Blockchain {
         //
         // TODO: what if the diffuclty was adjusted?
         if (!this.isPoWValid(current.sha256())) {
-          throw new Error(`Invalid previous block hash's difficutly for block #${i}!`);
+          throw new Error(
+            `Invalid previous block hash's difficutly for block #${i}!`
+          );
         }
       }
 
@@ -164,7 +294,7 @@ export class Blockchain {
   private verify() {
     // The blockchain can't be empty. It should always contain at least the genesis block.
     if (!Blockchain.verify(this.blocks)) {
-      throw new Error("Invalid blockchain!");
+      throw new Error('Invalid blockchain!');
     }
   }
 
@@ -191,7 +321,10 @@ export class Blockchain {
     }
 
     // Compare the candidate and consider to use it.
-    if (bestCandidateIndex !== -1 && (maxLength > this.blocks.length || !Blockchain.verify(this.blocks))) {
+    if (
+      bestCandidateIndex !== -1 &&
+      (maxLength > this.blocks.length || !Blockchain.verify(this.blocks))
+    ) {
       this.blocks = blockchains[bestCandidateIndex];
       this.save();
 
@@ -204,7 +337,7 @@ export class Blockchain {
   // Validates PoW.
   public static isPoWValid(pow: string): boolean {
     try {
-      if (!pow.startsWith("0x")) {
+      if (!pow.startsWith('0x')) {
         pow = `0x${pow}`;
       }
 
@@ -218,11 +351,19 @@ export class Blockchain {
   private mineBlock(transactions: Array<Transaction>): Block {
     // Create a new block which will "point" to the last block.
     const lastBlock = this.getLastBlock();
-    const newBlock = new Block(lastBlock.blockNumber + 1, transactions, Blockchain.now(), 0, lastBlock.sha256());
+    const newBlock = new Block(
+      lastBlock.blockNumber + 1,
+      transactions,
+      Blockchain.now(),
+      0,
+      lastBlock.sha256()
+    );
 
     while (true) {
       const pow = newBlock.sha256();
-      console.log(`Mining #${newBlock.blockNumber}: nonce: ${newBlock.nonce}, pow: ${pow}`);
+      console.log(
+        `Mining #${newBlock.blockNumber}: nonce: ${newBlock.nonce}, pow: ${pow}`
+      );
 
       if (Blockchain.isPoWValid(pow)) {
         console.log(`Found valid POW: ${pow}!`);
@@ -236,15 +377,27 @@ export class Blockchain {
   }
 
   // Submits new transaction
-  public submitTransaction(senderAddress: Address, recipientAddress: Address, value: number) {
-    this.transactionPool.push(new Transaction(senderAddress, recipientAddress, value));
+  public submitTransaction(
+    senderAddress: Address,
+    recipientAddress: Address,
+    value: number
+  ) {
+    this.transactionPool.push(
+      new Transaction(senderAddress, recipientAddress, value)
+    );
   }
 
   // Creates new block on the blockchain.
   public createBlock(): Block {
     // Add a "coinbase" transaction granting us the mining reward!
-    const transactions = [new Transaction(Blockchain.MINING_SENDER, this.nodeId, Blockchain.MINING_REWARD),
-      ...this.transactionPool];
+    const transactions = [
+      new Transaction(
+        Blockchain.MINING_SENDER,
+        this.nodeId,
+        Blockchain.MINING_REWARD
+      ),
+      ...this.transactionPool,
+    ];
 
     // Mine the transactions in a new block.
     const newBlock = this.mineBlock(transactions);
@@ -280,22 +433,29 @@ const blockchain = new Blockchain(nodeId);
 // Set up bodyParser:
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
+app.use(
+  (
+    err: any,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    console.error(err.stack);
 
-  res.status(500);
-});
+    res.status(500);
+  }
+);
 
 // Show all the blocks.
-app.get("/blocks", (req: express.Request, res: express.Response) => {
+app.get('/blocks', (req: express.Request, res: express.Response) => {
   res.json(serialize(blockchain.blocks));
 });
 
 // Show specific block.
-app.get("/blocks/:id", (req: express.Request, res: express.Response) => {
+app.get('/blocks/:id', (req: express.Request, res: express.Response) => {
   const id = Number(req.params.id);
   if (isNaN(id)) {
-    res.json("Invalid parameter!");
+    res.json('Invalid parameter!');
     res.status(500);
     return;
   }
@@ -309,7 +469,7 @@ app.get("/blocks/:id", (req: express.Request, res: express.Response) => {
   res.json(serialize(blockchain.blocks[id]));
 });
 
-app.post("/blocks/mine", (req: express.Request, res: express.Response) => {
+app.post('/blocks/mine', (req: express.Request, res: express.Response) => {
   // Mine the new block.
   const newBlock = blockchain.createBlock();
 
@@ -317,36 +477,38 @@ app.post("/blocks/mine", (req: express.Request, res: express.Response) => {
 });
 
 // Show all transactions in the transaction pool.
-app.get("/transactions", (req: express.Request, res: express.Response) => {
+app.get('/transactions', (req: express.Request, res: express.Response) => {
   res.json(serialize(blockchain.transactionPool));
 });
 
-app.post("/transactions", (req: express.Request, res: express.Response) => {
+app.post('/transactions', (req: express.Request, res: express.Response) => {
   const senderAddress = req.body.senderAddress;
   const recipientAddress = req.body.recipientAddress;
   const value = Number(req.body.value);
 
-  if (!senderAddress || !recipientAddress || !value)  {
-    res.json("Invalid parameters!");
+  if (!senderAddress || !recipientAddress || !value) {
+    res.json('Invalid parameters!');
     res.status(500);
     return;
   }
 
   blockchain.submitTransaction(senderAddress, recipientAddress, value);
 
-  res.json(`Transaction from ${senderAddress} to ${recipientAddress} was added successfully`);
+  res.json(
+    `Transaction from ${senderAddress} to ${recipientAddress} was added successfully`
+  );
 });
 
-app.get("/nodes", (req: express.Request, res: express.Response) => {
+app.get('/nodes', (req: express.Request, res: express.Response) => {
   res.json(serialize(blockchain.nodes.toArray()));
 });
 
-app.post("/nodes", (req: express.Request, res: express.Response) => {
+app.post('/nodes', (req: express.Request, res: express.Response) => {
   const id = req.body.id;
   const url = new URL(req.body.url);
 
-  if (!id || !url)  {
-    res.json("Invalid parameters!");
+  if (!id || !url) {
+    res.json('Invalid parameters!');
     res.status(500);
     return;
   }
@@ -361,32 +523,45 @@ app.post("/nodes", (req: express.Request, res: express.Response) => {
   }
 });
 
-app.put("/nodes/consensus", (req: express.Request, res: express.Response) => {
+app.put('/nodes/consensus', (req: express.Request, res: express.Response) => {
   // Fetch the state of the other nodes.
-  const requests = blockchain.nodes.toArray().map(node => axios.get(`${node.url}blocks`));
+  const requests = blockchain.nodes
+    .toArray()
+    .map(node => axios.get(`${node.url}blocks`));
 
   if (requests.length === 0) {
-    res.json("There are nodes to sync with!");
+    res.json('There are nodes to sync with!');
     res.status(404);
 
     return;
   }
 
-  axios.all(requests).then(axios.spread((...blockchains) => {
-    if (blockchain.consensus(blockchains.map(res => deserialize<Block[]>(Block, res.data)))) {
-      res.json(`Node ${nodeId} has reached a consensus on a new state.`);
-    } else {
-      res.json(`Node ${nodeId} hasn't reached a consensus on the existing state.`);
-    }
+  axios
+    .all(requests)
+    .then(
+      axios.spread((...blockchains) => {
+        if (
+          blockchain.consensus(
+            blockchains.map(res => deserialize<Block[]>(Block, res.data))
+          )
+        ) {
+          res.json(`Node ${nodeId} has reached a consensus on a new state.`);
+        } else {
+          res.json(
+            `Node ${nodeId} hasn't reached a consensus on the existing state.`
+          );
+        }
 
-    res.status(200);
-    return;
-  })).catch(err => {
-    console.log(err);
-    res.status(500);
-    res.json(err);
-    return;
-  });
+        res.status(200);
+        return;
+      })
+    )
+    .catch(err => {
+      console.log(err);
+      res.status(500);
+      res.json(err);
+      return;
+    });
 
   res.status(500);
 });
