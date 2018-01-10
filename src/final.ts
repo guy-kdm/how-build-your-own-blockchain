@@ -1,3 +1,14 @@
+/**
+* This is a simple blockchain implementation of a "web of trust" reputation ledger.
+* Nodes are represented by PGP keys (not the most efficiant, but the originator of the web-of-trust concept) 
+* Each node can than issue signed "claims" about other nodes.
+* e.g. A university's node can publish a "graduation" claim about a node, allowing employers aware of the node owner to verify the graduate's CV. 
+* This can also be used for vetting & introduction schemes, standard association stamps, P2P commercial reccomendations ext.  
+* Claims in this implementation are plain text with a signed hash but can take other representations for added perf and privacy).
+* More privacy can be achived by using multiple nodes or by identifying using a token who's association to a node is only known to a trusted party. 
+* Queries can than be passed via this trusted party for a fee.
+**/
+
 import { Address } from './08_storage';
 import { Blockchain } from './13_consensus';
 import { Address } from './12_discovery';
@@ -7,6 +18,7 @@ import { Address } from './10_initial_web_api';
 import { sha256 } from 'js-sha256';
 import { serialize, deserialize } from 'serializer.ts/Serializer';
 import BigNumber from 'bignumber.js';
+import openpgp from 'openpgp';
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -51,9 +63,9 @@ export class QuestionContent {
 }
 
 export class Claim {
-  public claimer: Address ?
   public subject: Address;
   public content: string;
+  public signature: string;
 
   constructor(subject: Address, content: string){
 
@@ -62,40 +74,42 @@ export class Claim {
 
 //todo
 export class Node {
-  constructor(seed: string, chain: Blockchain) {
-    const PGP = genPGP(seed);
-    this.address = PGP.publicKey;
-    this.privateKey = PGP.privateKey;
-  }
-
   public address: Address;
-  public submitInquiry(content: string, subject: Address, claimer: Address) {
-    const inquiry = encryptWithPGP(`___content___: ${content}, ___subject___: ${subject}`, claimer)
-    chain.submit({claimer, inquiry});
+  public privateKey: string;
+  
+  constructor(seed: string, chain: Blockchain, name:string, email:string) {
+    const options = {
+      userIds: [{name, email}],
+      numBits: 4096,
+      passphrase: seed
+    };
+ 
+    openpgp.generateKey(options).then((key:any) => {
+      this.privateKey = key.publicKeyArmored;
+      this.address = key.privateKeyArmored;
+    });
   }
 
-  public submitClaim(content: string, subject: Address, uri: string?) {
-    let actualContent = content;
-    if (uri)
-      actualContent = uri + '?hash=' + sha256(content)
-    else 
-      actualContent = content;
+  public async submitClaim(content: string, subject: Address) {
+    const options = {
+      data: sha256(content),
+      privateKeys: this.privateKey
+    };
 
-    chain.submit({claimer: this.address, claim: actualContent })
-
+    const {data: signature} = await openpgp.sign(options)
+    chain.submit({claimer: this.address, claim: content, signature })
   }
 
-  public respondToInquiry(){
-    //todo
+  public async verifyClaim(claim: Claim, claimer: Address){
+    const options = {
+      data: claim.signature,
+      publicKeys: claimer
+    };
+
+    const {data: signedSHA} = await openpgp.decrypt(options) 
+    return sha256(claim.content) === signedSHA
   }
 
-  /**
-   * todo: 
-   * 1. fill Node psuedo code and remove unused funcs
-   * 2. respondToInquiry
-   * 3. locate claimes about a node
-   * 4. make a usefull looking example 
-   */
   private privateKey: string;
 }
 
