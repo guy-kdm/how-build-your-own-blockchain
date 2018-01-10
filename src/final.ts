@@ -51,7 +51,13 @@ export class QuestionContent {
 }
 
 export class Claim {
+  public claimer: Address ?
+  public subject: Address;
+  public content: string;
 
+  constructor(subject: Address, content: string){
+
+  }
 }
 
 //todo
@@ -63,12 +69,12 @@ export class Node {
   }
 
   public address: Address;
-  public submitInquiry(content, subject, claimer) {
+  public submitInquiry(content: string, subject: Address, claimer: Address) {
     const inquiry = encryptWithPGP(`___content___: ${content}, ___subject___: ${subject}`, claimer)
     chain.submit({claimer, inquiry});
   }
 
-  public submitClaim(content, subject, uri: string?) {
+  public submitClaim(content: string, subject: Address, uri: string?) {
     let actualContent = content;
     if (uri)
       actualContent = uri + '?hash=' + sha256(content)
