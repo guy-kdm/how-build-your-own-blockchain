@@ -19,6 +19,8 @@ import { sha256 } from 'js-sha256';
 import { serialize, deserialize } from 'serializer.ts/Serializer';
 import BigNumber from 'bignumber.js';
 import openpgp from 'openpgp';
+import IPFS from 'ipfs'
+import {Buffer} from 'buffer';
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -32,6 +34,9 @@ import axios from 'axios';
 
 import { Set } from 'typescript-collections';
 import * as parseArgs from 'minimist';
+
+// above this length we save the claim content as ipfs and use hash
+const MAX_CLAIM_CONTENT_BYTES = 64;
 
 export type Address = string;
 
@@ -62,20 +67,28 @@ export class QuestionContent {
   getSignature(privateKey: string) {}
 }
 
-export class Claim {
-  public subject: Address;
-  public content: string;
-  public signature: string;
+function getIpfsHash(content: Buffer){
 
-  constructor(subject: Address, content: string){
+}
 
+function createClaim(subject: Address, content: Buffer, type: string){
+  const isOptimisationNeeded = content.byteLength > MAX_CLAIM_CONTENT_BYTES;
+
+  const optimisedContent = isOptimisationNeeded ? getIpfsHash(content) : content
+  // TODO: verifications
+  if(content.byteLength > MAX_CLAIM_CONTENT_BYTES){
+    // TODO: ipfs
+    // create a file. name by type and time and sha
+    // add to ipfs
   }
+  // if content length above N bytes- move to ipfs
 }
 
 //todo
 export class Node {
   public address: Address;
   public privateKey: string;
+  public ipfsAddress = new IPFS();
   
   constructor(seed: string, chain: Blockchain, name:string, email:string) {
     const options = {
@@ -95,6 +108,12 @@ export class Node {
       data: sha256(content),
       privateKeys: this.privateKey
     };
+
+    const {data: signature} = await openpgp.sign(options)
+    chain.submit({claimer: this.address, claim: content, signature })
+  }
+
+  public async submitIpfsClaim(content: string, subject: Address) {
 
     const {data: signature} = await openpgp.sign(options)
     chain.submit({claimer: this.address, claim: content, signature })
