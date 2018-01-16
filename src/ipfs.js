@@ -10,10 +10,14 @@ var {exec} = require('child_process');
 module.exports = async function publish(content) {
     // const claimsDirPath = './published-claims';
     // fs.mkdir(path);
-    // const claimFileName = "claim-" + Date.now();
+    // const claimFileName = "claim-" + Date.now
     // const claimFilePath = path.join(claimsDirPath, claimFileName);
     // await fs.writeFile(claimFilePath, content);
-    console.log('ipfs', Object.keys(ipfs));
-    var hash = await ipfs.files.add(content);
+    const node = await new ipfs();
+    // console.log('ipfs', Object.keys(ipfs));
+    // console.log('node', node);
+    console.log(content);
+    
+    var hash = await node.files.add(content);
     return hash;
 }
